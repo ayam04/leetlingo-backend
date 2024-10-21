@@ -27,7 +27,6 @@ sentiment_pipeline = pipeline("sentiment-analysis", model="distilbert-base-uncas
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
 
-
 class AccentClassifier(nn.Module):
     def __init__(self, num_classes):
         super(AccentClassifier, self).__init__()
@@ -218,7 +217,10 @@ def analyze_speech(audio_path):
     }
 
     data["scores"]["overall_summary"] = get_overall_summary(data)
-
+    
+    with open("results.json", "w") as f:
+        json.dump(data, f, indent=4)
+    
     return data
 
 # if __name__ == "__main__":

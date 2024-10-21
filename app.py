@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI, File, UploadFile
 from typing import List
 from fastapi.exceptions import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import os
 from pydantic import BaseModel
@@ -10,6 +11,13 @@ from functions import get_aws_questions
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class GetAwsQns(BaseModel):
     company: str
