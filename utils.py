@@ -7,25 +7,33 @@ from scipy.spatial.distance import cosine
 from sklearn.preprocessing import normalize
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 import whisper
-import os
-import re
-from collections import defaultdict
-import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-import json
+import warnings
 from functions import get_summary, get_overall_summary
+import json
 
+import librosa.util.deprecation
+setattr(librosa.util.deprecation, 'AUDIOREAD_PARAMS', {'backend': 'audioread'})
+
+warnings.filterwarnings("ignore", category=UserWarning, module="whisper.transcribe")
+warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+warnings.filterwarnings("ignore", category=UserWarning, module="librosa.core.audio")
 
 SAMPLE_RATE = 44000
 MAX_AUDIO_LENGTH = 10 * SAMPLE_RATE
 NUM_MFCC = 13
 MAX_MFCC_LENGTH = 1000
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+whisper_model = whisper.load_model("base").to(device)
 
-whisper_model = whisper.load_model("base")
-sentiment_pipeline = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english", device="cpu")
+sentiment_pipeline = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english",
+    device=device
+)
+
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
+model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased").to(device)
 
 class AccentClassifier(nn.Module):
     def __init__(self, num_classes):
@@ -46,147 +54,118 @@ class AccentClassifier(nn.Module):
         x = self.pool(F.relu(self.batch_norm1(self.conv1(x))))
         x = self.pool(F.relu(self.batch_norm2(self.conv2(x))))
         x = self.pool(F.relu(self.batch_norm3(self.conv3(x))))
-
-        x = x.view(x.size(0), -1)  # Flatten
+        x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
         return x
 
+@torch.no_grad()
 def transcribe_audio(audio_path):
-    result = whisper_model.transcribe(audio_path)
-    return result["text"]
+    try:
+        result = whisper_model.transcribe(audio_path, fp16=False)
+        return result["text"]
+    except Exception as e:
+        print(f"Error transcribing audio: {e}")
+        return ""
+
+def load_audio(audio_path, sr=None):
+    """Load audio file using audioread directly"""
+    try:
+        y, sr = librosa.load(audio_path, sr=sr, res_type='kaiser_fast')
+        return y, sr
+    except Exception as e:
+        print(f"Error loading audio: {e}")
+        return np.zeros(SAMPLE_RATE), SAMPLE_RATE
 
 def analyze_accent(audio_path):
-    y, sr = librosa.load(audio_path)
+    y, sr = load_audio(audio_path)
     pitches, _ = librosa.piptrack(y=y, sr=sr)
-    pitch_mean = np.mean(pitches[pitches > 0])
-    pitch_std = np.std(pitches[pitches > 0])
-    
+    pitch_data = pitches[pitches > 0]
+    if len(pitch_data) == 0:
+        return 5.0
+    pitch_mean = np.mean(pitch_data)
+    pitch_std = np.std(pitch_data)
     accent_score = min(10, max(0, (pitch_std / pitch_mean) * 10))
     return round(accent_score, 2)
 
 def analyze_clarity(text):
+    if not text:
+        return 5.0
     words = text.split()
+    if not words:
+        return 5.0
     avg_word_length = sum(len(word) for word in words) / len(words)
-    sentence_count = text.count('.') + text.count('!') + text.count('?')
-    avg_sentence_length = len(words) / max(1, sentence_count)
-    
+    sentence_count = max(1, sum(1 for char in text if char in '.!?'))
+    avg_sentence_length = len(words) / sentence_count
     clarity_score = 10 - min(10, max(0, (avg_word_length - 4) + (avg_sentence_length - 10)))
     return round(clarity_score, 2)
 
+@torch.no_grad()
 def analyze_confidence(text):
+    if not text:
+        return 5.0
     sentiment = sentiment_pipeline(text)[0]
     confidence_score = sentiment['score'] * 10 if sentiment['label'] == 'POSITIVE' else (1 - sentiment['score']) * 10
     return round(confidence_score, 2)
 
+@torch.no_grad()
 def analyze_vocabulary(text):
+    if not text:
+        return 5.0
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
-    with torch.no_grad():
-        outputs = model(**inputs)
-    
-    logits = outputs.logits
-    probabilities = torch.nn.functional.softmax(logits, dim=-1)
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    outputs = model(**inputs)
+    probabilities = F.softmax(outputs.logits, dim=-1)
     vocab_score = probabilities.max().item() * 10
     return round(vocab_score, 2)
 
-def analyze_pronunciation(transcript, accent_patterns):
-    accent_scores = defaultdict(int)
-    
-    for accent, patterns in accent_patterns.items():
-        for pattern, _ in patterns:
-            matches = re.findall(pattern, transcript, re.IGNORECASE)
-            accent_scores[accent] += len(matches)
-    
-    return accent_scores
-
-def extract_features(file_path):
-    try:
-        audio, _ = librosa.load(file_path, sr=SAMPLE_RATE, duration=MAX_AUDIO_LENGTH/SAMPLE_RATE)
-    except Exception as e:
-        print(f"Error loading audio file {file_path}: {e}")
-        return None
-
-    if len(audio) > MAX_AUDIO_LENGTH:
-        audio = audio[:MAX_AUDIO_LENGTH]
-    else:
-        audio = np.pad(audio, (0, MAX_AUDIO_LENGTH - len(audio)))
-
-    mfcc = librosa.feature.mfcc(y=audio, sr=SAMPLE_RATE, n_mfcc=NUM_MFCC)
-    
-    if mfcc.shape[1] > MAX_MFCC_LENGTH:
-        mfcc = mfcc[:, :MAX_MFCC_LENGTH]
-    else:
-        pad_width = ((0, 0), (0, MAX_MFCC_LENGTH - mfcc.shape[1]))
-        mfcc = np.pad(mfcc, pad_width, mode='constant', constant_values=0)
-    
-    return torch.FloatTensor(mfcc).unsqueeze(0)
-
 def extract_features_mfcc(audio_path, n_mfcc=13):
-    y, sr = librosa.load(audio_path, sr=None)
+    y, sr = load_audio(audio_path)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
-    mfcc_mean = np.mean(mfcc.T, axis=0)
-    return mfcc_mean
-
-def process_audio_files(audio_folder, output_json):
-    data = {}
-    for file_name in os.listdir(audio_folder):
-        if file_name.endswith(".wav"):
-            label = file_name.split("_")[0]
-            file_path = os.path.join(audio_folder, file_name)
-            vector = extract_features_mfcc(file_path).tolist()
-
-            if label in data:
-                data[label].append(vector)
-            else:
-                data[label] = [vector]
-    
-    with open(output_json, 'w') as json_file:
-        json.dump(data, json_file, indent=4)
-    print(f"Vector saved: {output_json}")
+    return np.mean(mfcc.T, axis=0)
 
 def match_accent(input_audio, vector_json):
-    with open(vector_json, 'r') as f:
-        accent_vectors = json.load(f)
+    try:
+        with open(vector_json, 'r') as f:
+            accent_vectors = json.load(f)
+    except FileNotFoundError:
+        return "unknown", 0.0
 
     input_vector = extract_features_mfcc(input_audio)
     input_vector = normalize([input_vector])[0]
 
     highest_similarity = -1
-    matched_accent = None
+    matched_accent = "unknown"
 
     for accent, vectors in accent_vectors.items():
         for vector in vectors:
             vector = np.array(vector)
             vector = normalize([vector])[0]
             similarity = 1 - cosine(input_vector, vector)
-            
             if similarity > highest_similarity:
                 highest_similarity = similarity
                 matched_accent = accent
 
     return matched_accent, highest_similarity
 
-def load_label_encoder(meta_file):
-    meta_data = pd.read_csv(meta_file)
-    le = LabelEncoder()
-    le.fit(meta_data['primary_language'])
-    return le 
-
-def load_model(model_path, num_classes):
-    model = AccentClassifier(num_classes)
-    state_dict = torch.load(model_path, map_location=torch.device('cpu'))
-    model.load_state_dict(state_dict)
-    return model
-
 def analyze_speech(audio_path):
+    from concurrent.futures import ThreadPoolExecutor
+    
     transcription = transcribe_audio(audio_path)
     
-    accent_score = analyze_accent(audio_path)
-    clarity_score = analyze_clarity(transcription)
-    confidence_score = analyze_confidence(transcription)
-    vocabulary_score = analyze_vocabulary(transcription)
-    matched_accent, similarity_score = match_accent(audio_path, 'accent_vectors.json')
+    with ThreadPoolExecutor() as executor:
+        future_accent = executor.submit(analyze_accent, audio_path)
+        future_clarity = executor.submit(analyze_clarity, transcription)
+        future_confidence = executor.submit(analyze_confidence, transcription)
+        future_vocabulary = executor.submit(analyze_vocabulary, transcription)
+        future_accent_match = executor.submit(match_accent, audio_path, 'accent_vectors.json')
+        
+        accent_score = future_accent.result()
+        clarity_score = future_clarity.result()
+        confidence_score = future_confidence.result()
+        vocabulary_score = future_vocabulary.result()
+        matched_accent, similarity_score = future_accent_match.result()
     
     overall_score = round((accent_score + clarity_score + confidence_score + vocabulary_score) / 4, 2)
     
@@ -197,33 +176,24 @@ def analyze_speech(audio_path):
             "overall_summary": "",
             "accent": {
                 "score": accent_score,
-                "summary": get_summary("accent", accent_score, transcription),
                 "matched_accent": matched_accent,
                 "similarity_score": round(similarity_score*10,2)
             },
             "clarity_and_articulation": {
-                "score": clarity_score,
-                "summary": get_summary("clarity and articulation", clarity_score, transcription)
+                "score": clarity_score
             },
             "confidence_and_tone": {
-                "score": confidence_score,
-                "summary": get_summary("confidence and tone", confidence_score, transcription)
+                "score": confidence_score
             },
             "vocabulary_and_language_use": {
-                "score": vocabulary_score,
-                "summary": get_summary("vocabulary and language use", vocabulary_score, transcription)
+                "score": vocabulary_score
             },
         }
     }
-
+    
     data["scores"]["overall_summary"] = get_overall_summary(data)
     
     with open("results.json", "w") as f:
         json.dump(data, f, indent=4)
     
     return data
-
-# if __name__ == "__main__":
-#     audio_file_path = "AudioSamples/accent_test.wav"
-#     results = analyze_speech(audio_file_path)
-#     print(json.dumps(results, indent=2))

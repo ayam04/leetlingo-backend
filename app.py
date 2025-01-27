@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from utils import analyze_speech
 from functions import get_aws_questions
 import asyncio
-import threading
 
 app = FastAPI()
 
