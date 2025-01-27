@@ -8,6 +8,8 @@ import os
 from pydantic import BaseModel
 from utils import analyze_speech
 from functions import get_aws_questions
+import asyncio
+import threading
 
 app = FastAPI()
 
@@ -34,7 +36,8 @@ async def score_language(audio: UploadFile = File(...)):
             temp_audio.write(content)
             temp_audio_path = temp_audio.name
 
-        result = analyze_speech(temp_audio_path)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, analyze_speech, temp_audio_path)
         os.unlink(temp_audio_path)
 
         return result
@@ -44,7 +47,8 @@ async def score_language(audio: UploadFile = File(...)):
 @app.post("/get_questions", response_model=QuestionsResponse)
 async def generate_questions(data: GetAwsQns):
     try:
-        result = get_aws_questions(data.company, data.role)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, get_aws_questions, data.company, data.role)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
