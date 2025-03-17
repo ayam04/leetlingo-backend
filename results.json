@@ -1,21 +1,21 @@
 {
-    "transcription": " Just by going through normal debugs.",
+    "transcription": "video questions uh something something",
     "scores": {
-        "overall_score": 6.15,
-        "overall_summary": "The candidate demonstrates strong clarity and articulation in their speech, making their points easily understandable. However, there is a lack of confidence and tone in their delivery, which could be improved to engage the audience better. To enhance their overall communication style, the candidate should work on increasing confidence levels and infusing more energy and enthusiasm into their speech. This can be achieved through practice, such as rehearsing in front of a mirror or recording mock interviews to identify areas of improvement.",
+        "overall_score": 3.0,
+        "overall_summary": "The speaker's overall performance was below average with a score of 3.0/10. Their accent was the strongest aspect with a score of 5.0/10, suggesting comprehensible pronunciation and enunciation. However, there's significant room for improvement in terms of clarity, confidence, and vocabulary, all scoring 2.0/10 or 3.0/10. The speaker should work on delivering their points more confidently and clearly, as well as expanding their vocabulary for more effective communication.",
         "accent": {
-            "score": 7.01,
-            "matched_accent": "kashmiri",
-            "similarity_score": 9.84
+            "score": 5.0,
+            "matched_accent": "unknown",
+            "similarity_score": 0.0
         },
         "clarity_and_articulation": {
-            "score": 10
+            "score": 3.0
         },
         "confidence_and_tone": {
-            "score": 0.01
+            "score": 2.0
         },
         "vocabulary_and_language_use": {
-            "score": 7.57
+            "score": 2.0
         }
     }
 }
