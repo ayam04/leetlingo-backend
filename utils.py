@@ -1,9 +1,7 @@
-import torch
 import librosa
 import numpy as np
 import json
 import openai
-import os
 from concurrent.futures import ThreadPoolExecutor
 import warnings
 
@@ -16,9 +14,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module="librosa.core.aud
 
 SAMPLE_RATE = 44000
 MAX_AUDIO_LENGTH = 10 * SAMPLE_RATE
-
-# Ensure OpenAI API key is set
-# openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def load_audio(audio_path, sr=None):
     try:
@@ -40,7 +35,7 @@ def transcribe_audio(audio_path):
         print(f"Error transcribing audio with OpenAI: {e}")
         return ""
 
-def analyze_accent_with_openai(audio_path, transcription):
+def analyze_accent_with_openai(transcription):
     try:
         response = openai.chat.completions.create(
             model="gpt-4",
@@ -160,7 +155,7 @@ def analyze_speech(audio_path):
     transcription = transcribe_audio(audio_path)
     
     with ThreadPoolExecutor() as executor:
-        future_accent = executor.submit(analyze_accent_with_openai, audio_path, transcription)
+        future_accent = executor.submit(analyze_accent_with_openai, transcription)
         future_clarity = executor.submit(analyze_clarity_with_openai, transcription)
         future_confidence = executor.submit(analyze_confidence_with_openai, transcription)
         future_vocabulary = executor.submit(analyze_vocabulary_with_openai, transcription)
