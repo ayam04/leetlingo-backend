@@ -10,6 +10,7 @@ LeetLingo Backend is a FastAPI-based service that provides speech analysis and i
   - Confidence and tone evaluation
   - Vocabulary and language use analysis
   - Overall speech quality scoring
+
 - Interview Question Generation
   - Company-specific questions
   - Role-based question generation
@@ -17,7 +18,7 @@ LeetLingo Backend is a FastAPI-based service that provides speech analysis and i
 
 ## Prerequisites
 
-- Python 3.x
+- Python 3.11.x
 - OpenAI API Key
 - AWS Credentials (for Bedrock integration)
 - Required Python packages (see requirements.txt)
