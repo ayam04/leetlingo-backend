@@ -1,6 +1,6 @@
 # LeetLingo Backend
 
-LeetLingo Backend is a FastAPI-based service that provides speech analysis and interview question generation capabilities. The service analyzes spoken language for various parameters including accent, clarity, confidence, and vocabulary.
+The backend FastAPI service for LeetLingo that provides speech analysis and interview question generation capabilities. The service analyzes spoken language for various parameters including accent, clarity, confidence, and vocabulary.
 
 ## Features
 
@@ -42,6 +42,8 @@ OPENAI_API_KEY=your_openai_api_key
 region=your_aws_region
 aws_access_key_id=your_aws_access_key
 aws_secret_access_key=your_aws_secret_key
+KNOWLEDGE_BASE_ID=your_knowledge_base_id
+MODEL_ARN=your_model_arn
 ```
 
 ## API Endpoints

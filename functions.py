@@ -7,8 +7,8 @@ from botocore.exceptions import ClientError
 
 load_dotenv()
 
-KNOWLEDGE_BASE_ID = "EY0ZGLB9OT"
-MODEL_ARN = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-text-premier-v1:0"
+KNOWLEDGE_BASE_ID = os.getenv('KNOWLEDGE_BASE_ID')
+MODEL_ARN = os.getenv('MODEL_ARN')
 
 openai_api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = openai_api_key
@@ -25,7 +25,7 @@ def get_summary(category, score, transcription):
     try:
         client = openai.OpenAI()
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that provides detailed but concise speech analysis based on various parameters. You analyse candidate interview."},
                 {"role": "user", "content": prompt}
@@ -41,7 +41,7 @@ def get_overall_summary(data):
     try:
         client = openai.OpenAI()
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that provides detailed but concise speech analysis based on various parameters. You analyse candidate interview."},
                 {"role": "user", "content": prompt}
